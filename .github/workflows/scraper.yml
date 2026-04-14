@@ -18,7 +18,8 @@ jobs:
 
       - name: Install yt-dlp and Rclone
         run: |
-          pip install yt-dlp
+          # Force install the absolute newest unreleased version of yt-dlp
+          pip install -U https://github.com/yt-dlp/yt-dlp/archive/master.zip
           sudo apt-get update -qq
           sudo apt-get install -y rclone
 
@@ -34,17 +35,18 @@ jobs:
 
       - name: Stream Playlist to Google Drive
         run: |
-          # 1. Your hardcoded link (from your screenshot)
-          PLAYLIST_URL="https://youtube.com/playlist?list=PL5JWOhqfIvQ4YKgjbzA5ngyPS0fZr8fno"
+          # Your exact playlist link
+          PLAYLIST_URL="https://youtube.com/playlist?list=PL5JWDhQfiVQ4YKgJbzA5ngyPSOfZr8fno"
           
-          # 2. Your target folder in Google Drive
+          # Your target folder in Google Drive
           DRIVE_FOLDER="gdrive:Telegram_Archive/Reasoning/"
           
           echo "Starting 1-by-1 transfer for: $PLAYLIST_URL"
           
-          # 3. Fixed the format string (added ext=m4a)
+          # The new --extractor-args flag disguises the server as an Android device!
           yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
                  -o "%(playlist_index)02d - %(title)s.%(ext)s" \
+                 --extractor-args "youtube:client=android,web" \
                  --ignore-errors \
                  --no-warnings \
                  --exec "rclone move {} \"$DRIVE_FOLDER\" --drive-chunk-size 64M -v" \
