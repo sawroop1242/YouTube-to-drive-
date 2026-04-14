@@ -1,4 +1,4 @@
-name: YouTube Playlist to GDrive (Authenticated)
+name: YouTube Playlist to Google Drive
 
 on:
   workflow_dispatch:
@@ -6,113 +6,43 @@ on:
       playlist_url:
         description: 'YouTube Playlist URL'
         required: true
-        type: string
       drive_folder:
-        description: 'Google Drive destination folder path'
-        required: false
-        default: 'gdrive:YouTube_Downloads'
-        type: string
+        description: 'Destination Folder Name in Google Drive'
+        required: true
+        default: 'YouTube_Downloads'
 
 jobs:
-  download_and_upload:
+  process:
     runs-on: ubuntu-latest
-
-    env:
-      RCLONE_CONF_JSON: ${{ secrets.RCLONE_CONF }}
-      YT_COOKIES_TXT: ${{ secrets.YT_COOKIES }}
-
     steps:
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install yt-dlp and Rclone
+      - name: Set up Environment
         run: |
-          pip install -U yt-dlp
-          pip install -U "yt-dlp[default]"
-          sudo apt-get update -qq
-          sudo apt-get install -y rclone ffmpeg
-          yt-dlp --version
-
-
-      
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg rclone
+          pip install https://github.com/yt-dlp/yt-dlp/archive/master.zip
 
       - name: Configure Rclone
         run: |
           mkdir -p ~/.config/rclone
-          cat > ~/.config/rclone/rclone.conf << EOF
-          [gdrive]
-          type = drive
-          scope = drive
-          token = ${RCLONE_CONF_JSON}
-          EOF
-
-      - name: Build Cookie File
-        run: |
-          printf '%s' "$YT_COOKIES_TXT" > cookies.txt
-          echo "Cookie lines: $(wc -l < cookies.txt)"
-          head -1 cookies.txt
-
-      - name: Verify Cookies Format
-        run: |
-          if ! head -1 cookies.txt | grep -q "Netscape HTTP Cookie File"; then
-            echo "ERROR: cookies.txt is not in Netscape format!"
-            exit 1
-          fi
-          echo "✓ Cookie format OK"
+          echo "${{ secrets.RCLONE_CONFIG_DATA }}" > ~/.config/rclone/rclone.conf
 
       - name: Download Playlist
         run: |
-          mkdir -p /tmp/ytdl
-
-          PLAYLIST_URL="${{ github.event.inputs.playlist_url }}"
-          echo "Downloading: $PLAYLIST_URL"
-
-          yt-dlp \
-            -f "18/best" \
-            --extractor-args "youtube:player_client=tv,default" \
-            -o "/tmp/ytdl/%(playlist_index)02d - %(title)s.%(ext)s" \
-            --cookies cookies.txt \
-            --ignore-errors \
-            --retries 5 \
-            --fragment-retries 5 \
-            --no-warnings \
-            --progress \
-            "$PLAYLIST_URL" || true
-
-          echo "------------------------------"
-          echo "Files downloaded: $(ls /tmp/ytdl/ | wc -l)"
-          ls /tmp/ytdl/
-
-      
-     
-
-      
+          mkdir -p downloads
+          yt-dlp --extractor-args "youtube:player_client=android_vr" \
+                 -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
+                 --yes-playlist \
+                 --newline \
+                 -o "downloads/%(title)s.%(ext)s" \
+                 "${{ github.event.inputs.playlist_url }}"
 
       - name: Upload to Google Drive
         run: |
-          DRIVE_FOLDER="${{ github.event.inputs.drive_folder }}"
-
-          FILE_COUNT=$(ls /tmp/ytdl/ | wc -l)
-          if [ "$FILE_COUNT" -eq 0 ]; then
-            echo "ERROR: No files downloaded!"
-            exit 1
-          fi
-
-          echo "Uploading $FILE_COUNT files to $DRIVE_FOLDER"
-
-          rclone move /tmp/ytdl/ "$DRIVE_FOLDER" \
-            --drive-chunk-size 128M \
-            --transfers 2 \
-            --progress \
-            -v
-
-          echo "✓ Upload complete!"
-
-      - name: Cleanup
-        if: always()
-        run: |
-          rm -f cookies.txt
-          rm -rf /tmp/ytdl/
-          echo "✓ Cleanup done"
+          rclone copy downloads/ "gdrive:${{ github.event.inputs.drive_folder }}" \
+                 --progress \
+                 --drive-chunk-size 64M \
+                 --buffer-size 32M
+                 
