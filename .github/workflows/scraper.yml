@@ -32,14 +32,12 @@ jobs:
       - name: Configure Rclone
         run: |
           mkdir -p ~/.config/rclone
-          # This pulls your config from GitHub Secrets
           echo "${{ secrets.RCLONE_CONF }}" > ~/.config/rclone/rclone.conf
 
       - name: Download Playlist
         run: |
           mkdir -p temp_downloads
           yt-dlp --extractor-args "youtube:player_client=android_vr" \
-                 --cookies-from-browser chrome || true \
                  -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
                  --yes-playlist \
                  --ignore-errors \
@@ -49,8 +47,8 @@ jobs:
 
       - name: Upload to Google Drive
         run: |
-          # Moves files to save space on the GitHub runner
-          rclone move temp_downloads/ "gdrive:${{ github.event.inputs.drive_path }}" \
+          # Use 'copy' instead of 'move' for the first test to be safe
+          rclone copy temp_downloads/ "gdrive:${{ github.event.inputs.drive_path }}" \
                  --progress \
                  --drive-chunk-size 64M \
                  --buffer-size 32M \
