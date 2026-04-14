@@ -6,43 +6,53 @@ on:
       playlist_url:
         description: 'YouTube Playlist URL'
         required: true
-      drive_folder:
-        description: 'Destination Folder Name in Google Drive'
+      drive_path:
+        description: 'Destination Path in Google Drive'
         required: true
-        default: 'YouTube_Downloads'
+        default: 'Telegram_Archive/Reasoning'
 
 jobs:
-  process:
+  download_and_upload:
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Environment
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg rclone
+
+      - name: Install Latest yt-dlp
+        run: |
+          python3 -m pip install -U pip
           pip install https://github.com/yt-dlp/yt-dlp/archive/master.zip
 
       - name: Configure Rclone
         run: |
           mkdir -p ~/.config/rclone
+          # This pulls your config from GitHub Secrets
           echo "${{ secrets.RCLONE_CONF }}" > ~/.config/rclone/rclone.conf
 
       - name: Download Playlist
         run: |
-          mkdir -p downloads
+          mkdir -p temp_downloads
           yt-dlp --extractor-args "youtube:player_client=android_vr" \
+                 --cookies-from-browser chrome || true \
                  -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
                  --yes-playlist \
+                 --ignore-errors \
                  --newline \
-                 -o "downloads/%(title)s.%(ext)s" \
+                 -o "temp_downloads/%(title)s.%(ext)s" \
                  "${{ github.event.inputs.playlist_url }}"
 
       - name: Upload to Google Drive
         run: |
-          rclone copy downloads/ "gdrive:${{ github.event.inputs.drive_folder }}" \
+          # Moves files to save space on the GitHub runner
+          rclone move temp_downloads/ "gdrive:${{ github.event.inputs.drive_path }}" \
                  --progress \
                  --drive-chunk-size 64M \
-                 --buffer-size 32M
+                 --buffer-size 32M \
+                 --transfers 4
                  
