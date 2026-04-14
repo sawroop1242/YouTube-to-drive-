@@ -70,11 +70,11 @@ jobs:
           echo "Downloading: $PLAYLIST_URL"
 
           yt-dlp \
-            --no-check-certificates \
-            --extractor-args "youtube:player_client=ios;player_skip=webpage,configs" \
-            -f "best" \
-            -o "/tmp/ytdl/%(playlist_index)02d - %(title)s.%(ext)s" \
+            -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/b[ext=mp4]/b" \
+            --merge-output-format mp4 \
+            --extractor-args "youtube:player_client=ios" \
             --cookies cookies.txt \
+            -o "/tmp/ytdl/%(playlist_index)02d - %(title)s.%(ext)s" \
             --ignore-errors \
             --retries 10 \
             --fragment-retries 10 \
@@ -82,10 +82,7 @@ jobs:
             --progress \
             "$PLAYLIST_URL" || true
 
-          echo "------------------------------"
-          echo "Files downloaded: $(ls /tmp/ytdl/ | wc -l)"
-          ls /tmp/ytdl/
-
+          
       
      
 
