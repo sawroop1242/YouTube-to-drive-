@@ -1,0 +1,59 @@
+name: YouTube Playlist to GDrive (Streaming)
+
+on:
+  # Runs manually when you click "Run workflow"
+  workflow_dispatch:
+
+jobs:
+  download_and_upload:
+    runs-on: ubuntu-latest
+    
+    env:
+      # Pulls your existing Google Drive token
+      RCLONE_CONF_JSON: ${{ secrets.RCLONE_CONF }}
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install yt-dlp and Rclone
+        run: |
+          pip install yt-dlp
+          sudo apt-get update -qq
+          sudo apt-get install -y rclone
+
+      - name: Configure Rclone Connection
+        run: |
+          mkdir -p ~/.config/rclone
+          cat << EOF > ~/.config/rclone/rclone.conf
+          [gdrive]
+          type = drive
+          scope = drive
+          token = $RCLONE_CONF_JSON
+          EOF
+
+      - name: Stream Playlist to Google Drive
+        run: |
+          # 1. Your hardcoded link
+          PLAYLIST_URL="Https://youtube.com/playlist?list=PL53WOhqfIvD4YXg3bzASngyPS0FZr8Fmo&si=koc3F-FZKyji1954"
+          
+          # 2. Your target folder in Google Drive
+          DRIVE_FOLDER="gdrive:Telegram_Archive/Reasoning/"
+          
+          echo "Starting 1-by-1 transfer for: $PLAYLIST_URL"
+          
+          # 3. The magic --exec flag
+          # This tells yt-dlp to download exactly ONE video, immediately trigger 
+          # rclone to move it to Google Drive (which deletes it locally), 
+          # and ONLY THEN move on to download the next video.
+          yt-dlp -f "bestvideo[ext=mp4]+bestaudio[m4a]/best[ext=mp4]/best" \
+                 -o "%(playlist_index)02d - %(title)s.%(ext)s" \
+                 --ignore-errors \
+                 --no-warnings \
+                 --exec "rclone move {} \"$DRIVE_FOLDER\" --drive-chunk-size 64M -v" \
+                 "$PLAYLIST_URL"
+          
+          echo "Playlist transfer complete!"
+
