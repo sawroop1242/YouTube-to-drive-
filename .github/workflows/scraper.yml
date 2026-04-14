@@ -1,4 +1,4 @@
-name: YouTube Playlist to Google Drive
+name: YouTube Playlist to GDrive (Authenticated)
 
 on:
   workflow_dispatch:
@@ -6,51 +6,83 @@ on:
       playlist_url:
         description: 'YouTube Playlist URL'
         required: true
-      drive_path:
-        description: 'Destination Path in Google Drive'
-        required: true
-        default: 'Telegram_Archive/Reasoning'
+        type: string
+      drive_folder:
+        description: 'Google Drive destination folder path'
+        required: false
+        default: 'gdrive:YouTube_Downloads'
+        type: string
 
 jobs:
   download_and_upload:
     runs-on: ubuntu-latest
-    
+
+    env:
+      RCLONE_CONF_JSON: ${{ secrets.RCLONE_CONF }}
+
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Install System Dependencies
+      - name: Install yt-dlp and Rclone
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg rclone
-
-      - name: Install Latest yt-dlp
-        run: |
-          python3 -m pip install -U pip
-          pip install https://github.com/yt-dlp/yt-dlp/archive/master.zip
+          pip install -U yt-dlp
+          sudo apt-get update -qq
+          sudo apt-get install -y rclone ffmpeg
+          yt-dlp --version
 
       - name: Configure Rclone
         run: |
           mkdir -p ~/.config/rclone
-          echo "${{ secrets.RCLONE_CONF }}" > ~/.config/rclone/rclone.conf
+          cat > ~/.config/rclone/rclone.conf << EOF
+          [gdrive]
+          type = drive
+          scope = drive
+          token = ${RCLONE_CONF}
+          EOF
 
       - name: Download Playlist
         run: |
-          mkdir -p temp_downloads
-          yt-dlp --extractor-args "youtube:player_client=android_vr" \
-                 -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
-                 --yes-playlist \
-                 --ignore-errors \
-                 --newline \
-                 -o "temp_downloads/%(title)s.%(ext)s" \
-                 "${{ github.event.inputs.playlist_url }}"
+          mkdir -p /tmp/ytdl
+
+          PLAYLIST_URL="${{ github.event.inputs.playlist_url }}"
+          echo "Downloading: $PLAYLIST_URL"
+
+          yt-dlp \
+            --extractor-args "youtube:player_client=android_vr" \
+            -f "bestvideo+bestaudio/best" \
+            --merge-output-format mp4 \
+            -o "/tmp/ytdl/%(playlist_index)02d - %(title)s.%(ext)s" \
+            --ignore-errors \
+            --retries 5 \
+            --fragment-retries 5 \
+            --no-warnings \
+            --progress \
+            "$PLAYLIST_URL" || true
+
+          echo "------------------------------"
+          echo "Files downloaded: $(ls /tmp/ytdl/ | wc -l)"
+          ls /tmp/ytdl/
 
       - name: Upload to Google Drive
         run: |
-          # Use 'copy' instead of 'move' for the first test to be safe
-          rclone copy temp_downloads/ "gdrive:${{ github.event.inputs.drive_path }}" \
-                 --progress \
-                 --drive-chunk-size 64M \
-                 --buffer-size 32M \
-                 --transfers 4
-                 
+          DRIVE_FOLDER="${{ github.event.inputs.drive_folder }}"
+
+          FILE_COUNT=$(ls /tmp/ytdl/ | wc -l)
+          if [ "$FILE_COUNT" -eq 0 ]; then
+            echo "ERROR: No files downloaded!"
+            exit 1
+          fi
+
+          echo "Uploading $FILE_COUNT files to $DRIVE_FOLDER"
+
+          rclone move /tmp/ytdl/ "$DRIVE_FOLDER" \
+            --drive-chunk-size 128M \
+            --transfers 2 \
+            --progress \
+            -v
+
+          echo "✓ Upload complete!"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf /tmp/ytdl/
+          echo "✓ Cleanup done"
