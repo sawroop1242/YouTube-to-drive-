@@ -63,20 +63,19 @@ jobs:
 
           PLAYLIST_URL="${{ github.event.inputs.playlist_url }}"
           echo "Downloading: $PLAYLIST_URL"
-
           yt-dlp \
             -f "bestvideo+bestaudio/best" \
             --merge-output-format mp4 \
+            --extractor-args "youtube:player_client=web,default" \
             -o "/tmp/ytdl/%(playlist_index)02d - %(title)s.%(ext)s" \
             --cookies cookies.txt \
             --ignore-errors \
             --retries 5 \
             --fragment-retries 5 \
-            --file-access-retries 5 \
             --no-warnings \
             --progress \
             "$PLAYLIST_URL" || true
-
+            
           echo "------------------------------"
           echo "Files downloaded: $(ls /tmp/ytdl/ | wc -l)"
           ls /tmp/ytdl/
