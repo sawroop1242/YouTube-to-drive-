@@ -57,6 +57,9 @@ jobs:
           fi
           echo "✓ Cookie format OK"
 
+      
+
+
       - name: Download Playlist
         run: |
           mkdir -p /tmp/ytdl
@@ -65,9 +68,9 @@ jobs:
           echo "Downloading: $PLAYLIST_URL"
 
           yt-dlp \
-            -f "bestvideo+bestaudio/best" \
+            -f "best[height<=1080]/best" \
             --merge-output-format mp4 \
-            --extractor-args "youtube:player_client=web,default" \
+            --extractor-args "youtube:player_client=android,web" \
             -o "/tmp/ytdl/%(playlist_index)02d - %(title)s.%(ext)s" \
             --cookies cookies.txt \
             --ignore-errors \
