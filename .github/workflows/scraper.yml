@@ -53,9 +53,9 @@ jobs:
           echo "Downloading: $PLAYLIST_URL"
 
           yt-dlp \
-            --extractor-args "youtube:player_client=android_vr" \
+            --extractor-args "youtube:player_client=android_vr,web" \
             --cookies cookies.txt \
-            -f "bestvideo+bestaudio/best" \
+            -f "b[ext=mp4]/bestvideo+bestaudio/b" \
             --merge-output-format mp4 \
             -o "/tmp/ytdl/%(playlist_index)02d - %(title)s.%(ext)s" \
             --ignore-errors \
