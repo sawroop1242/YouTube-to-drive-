@@ -1,12 +1,22 @@
-name: YouTube Playlist to GDrive (Streaming)
+name: YouTube Playlist to GDrive (Authenticated)
 
 on:
   workflow_dispatch:
+    inputs:
+      playlist_url:
+        description: 'YouTube Playlist URL'
+        required: true
+        type: string
+      drive_folder:
+        description: 'Google Drive destination folder path'
+        required: false
+        default: 'gdrive:YouTube_Downloads'
+        type: string
 
 jobs:
   download_and_upload:
     runs-on: ubuntu-latest
-    
+
     env:
       RCLONE_CONF_JSON: ${{ secrets.RCLONE_CONF }}
       YT_COOKIES_TXT: ${{ secrets.YT_COOKIES }}
@@ -19,44 +29,63 @@ jobs:
 
       - name: Install yt-dlp and Rclone
         run: |
-          pip install -U https://github.com/yt-dlp/yt-dlp/archive/master.zip
+          pip install -U "yt-dlp[default]"
           sudo apt-get update -qq
           sudo apt-get install -y rclone
 
-      - name: Configure Rclone Connection
+      - name: Configure Rclone
         run: |
           mkdir -p ~/.config/rclone
-          cat << EOF > ~/.config/rclone/rclone.conf
+          cat > ~/.config/rclone/rclone.conf << EOF
           [gdrive]
           type = drive
           scope = drive
-          token = $RCLONE_CONF_JSON
+          token = ${RCLONE_CONF_JSON}
           EOF
 
       - name: Build Cookie File
         run: |
-          # Creates a physical cookies.txt file from your GitHub Secret
-          cat << EOF > cookies.txt
-          $YT_COOKIES_TXT
-          EOF
+          printf '%s' "$YT_COOKIES_TXT" > cookies.txt
+          echo "Cookie file lines: $(wc -l < cookies.txt)"
+          head -1 cookies.txt
+
+      - name: Verify Cookies Format
+        run: |
+          if ! head -1 cookies.txt | grep -q "Netscape HTTP Cookie File"; then
+            echo "ERROR: cookies.txt is not in Netscape format!"
+            exit 1
+          fi
+          echo "✓ Cookie format OK"
 
       - name: Stream Playlist to Google Drive
         run: |
-          # Your exact direct YouTube URL
-          PLAYLIST_URL="https://www.youtube.com/playlist?list=PL5JWdhQfiVQ4YKgJbzA5ngyPSOfZr8fnO"
-          
-          DRIVE_FOLDER="gdrive:Telegram_Archive/Reasoning/"
-          
-          echo "Starting authenticated transfer for: $PLAYLIST_URL"
-          
-          # Notice the new --cookies flag added here!
-          yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
-                 -o "%(playlist_index)02d - %(title)s.%(ext)s" \
-                 --cookies cookies.txt \
-                 --ignore-errors \
-                 --no-warnings \
-                 --exec "rclone move {} \"$DRIVE_FOLDER\" --drive-chunk-size 64M -v" \
-                 "$PLAYLIST_URL"
-          
-          echo "Playlist transfer complete!"
-          
+          DRIVE_FOLDER="${{ github.event.inputs.drive_folder }}"
+          PLAYLIST_URL="${{ github.event.inputs.playlist_url }}"
+
+          echo "Starting transfer: $PLAYLIST_URL"
+          echo "Destination: $DRIVE_FOLDER"
+
+          yt-dlp \
+            -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
+            -o "/tmp/ytdl/%(playlist_index)02d - %(title)s.%(ext)s" \
+            --cookies cookies.txt \
+            --ignore-errors \
+            --retries 5 \
+            --fragment-retries 5 \
+            --no-warnings \
+            --progress \
+            "$PLAYLIST_URL"
+
+          echo "Upload to Drive..."
+          rclone move /tmp/ytdl/ "$DRIVE_FOLDER" \
+            --drive-chunk-size 64M \
+            --transfers 2 \
+            -v
+
+          echo "✓ Transfer complete!"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f cookies.txt
+          rm -rf /tmp/ytdl/
