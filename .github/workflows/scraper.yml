@@ -19,6 +19,7 @@ jobs:
 
     env:
       RCLONE_CONF_JSON: ${{ secrets.RCLONE_CONF }}
+      YT_COOKIES_TXT: ${{ secrets.YT_COOKIES }}
 
     steps:
       - name: Install yt-dlp and Rclone
@@ -38,6 +39,12 @@ jobs:
           token = ${RCLONE_CONF}
           EOF
 
+      - name: Build Cookie File
+        run: |
+          printf '%s' "$YT_COOKIES_TXT" > cookies.txt
+          head -1 cookies.txt
+          echo "Cookie lines: $(wc -l < cookies.txt)"
+
       - name: Download Playlist
         run: |
           mkdir -p /tmp/ytdl
@@ -47,6 +54,7 @@ jobs:
 
           yt-dlp \
             --extractor-args "youtube:player_client=android_vr" \
+            --cookies cookies.txt \
             -f "bestvideo+bestaudio/best" \
             --merge-output-format mp4 \
             -o "/tmp/ytdl/%(playlist_index)02d - %(title)s.%(ext)s" \
@@ -84,5 +92,6 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
+          rm -f cookies.txt
           rm -rf /tmp/ytdl/
           echo "✓ Cleanup done"
