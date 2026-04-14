@@ -31,7 +31,7 @@ jobs:
         run: |
           pip install -U "yt-dlp[default]"
           sudo apt-get update -qq
-          sudo apt-get install -y rclone
+          sudo apt-get install -y rclone ffmpeg
 
       - name: Configure Rclone
         run: |
@@ -46,7 +46,7 @@ jobs:
       - name: Build Cookie File
         run: |
           printf '%s' "$YT_COOKIES_TXT" > cookies.txt
-          echo "Cookie file lines: $(wc -l < cookies.txt)"
+          echo "Cookie lines: $(wc -l < cookies.txt)"
           head -1 cookies.txt
 
       - name: Verify Cookies Format
@@ -57,35 +57,53 @@ jobs:
           fi
           echo "✓ Cookie format OK"
 
-      - name: Stream Playlist to Google Drive
+      - name: Download Playlist
         run: |
-          DRIVE_FOLDER="${{ github.event.inputs.drive_folder }}"
-          PLAYLIST_URL="${{ github.event.inputs.playlist_url }}"
+          mkdir -p /tmp/ytdl
 
-          echo "Starting transfer: $PLAYLIST_URL"
-          echo "Destination: $DRIVE_FOLDER"
+          PLAYLIST_URL="${{ github.event.inputs.playlist_url }}"
+          echo "Downloading: $PLAYLIST_URL"
 
           yt-dlp \
-            -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
+            -f "bestvideo+bestaudio/best" \
+            --merge-output-format mp4 \
             -o "/tmp/ytdl/%(playlist_index)02d - %(title)s.%(ext)s" \
             --cookies cookies.txt \
             --ignore-errors \
             --retries 5 \
             --fragment-retries 5 \
+            --file-access-retries 5 \
             --no-warnings \
             --progress \
-            "$PLAYLIST_URL"
+            "$PLAYLIST_URL" || true
 
-          echo "Upload to Drive..."
+          echo "------------------------------"
+          echo "Files downloaded: $(ls /tmp/ytdl/ | wc -l)"
+          ls /tmp/ytdl/
+
+      - name: Upload to Google Drive
+        run: |
+          DRIVE_FOLDER="${{ github.event.inputs.drive_folder }}"
+
+          FILE_COUNT=$(ls /tmp/ytdl/ | wc -l)
+          if [ "$FILE_COUNT" -eq 0 ]; then
+            echo "ERROR: No files downloaded!"
+            exit 1
+          fi
+
+          echo "Uploading $FILE_COUNT files to $DRIVE_FOLDER"
+
           rclone move /tmp/ytdl/ "$DRIVE_FOLDER" \
-            --drive-chunk-size 64M \
+            --drive-chunk-size 128M \
             --transfers 2 \
+            --progress \
             -v
 
-          echo "✓ Transfer complete!"
+          echo "✓ Upload complete!"
 
       - name: Cleanup
         if: always()
         run: |
           rm -f cookies.txt
           rm -rf /tmp/ytdl/
+          echo "✓ Cleanup done"
