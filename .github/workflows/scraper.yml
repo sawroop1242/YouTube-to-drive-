@@ -9,6 +9,7 @@ jobs:
     
     env:
       RCLONE_CONF_JSON: ${{ secrets.RCLONE_CONF }}
+      YT_COOKIES_TXT: ${{ secrets.YT_COOKIES }}
 
     steps:
       - name: Set up Python
@@ -32,22 +33,26 @@ jobs:
           token = $RCLONE_CONF_JSON
           EOF
 
+      - name: Build Cookie File
+        run: |
+          # Creates a physical cookies.txt file from your GitHub Secret
+          cat << EOF > cookies.txt
+          $YT_COOKIES_TXT
+          EOF
+
       - name: Stream Playlist to Google Drive
         run: |
-          # 1. Use the exact, direct YouTube URL instead of the redirect
+          # Your exact direct YouTube URL
           PLAYLIST_URL="https://www.youtube.com/playlist?list=PL5JWdhQfiVQ4YKgJbzA5ngyPSOfZr8fnO"
           
-          # 2. Your target folder
           DRIVE_FOLDER="gdrive:Telegram_Archive/Reasoning/"
           
-          echo "Starting 1-by-1 transfer for: $PLAYLIST_URL"
+          echo "Starting authenticated transfer for: $PLAYLIST_URL"
           
-          # 3. Added --force-ipv4 and ios client spoofing to bypass the Azure IP block
+          # Notice the new --cookies flag added here!
           yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
                  -o "%(playlist_index)02d - %(title)s.%(ext)s" \
-                 --force-ipv4 \
-                 --extractor-args "youtube:client=ios" \
-                 --sleep-requests 2 \
+                 --cookies cookies.txt \
                  --ignore-errors \
                  --no-warnings \
                  --exec "rclone move {} \"$DRIVE_FOLDER\" --drive-chunk-size 64M -v" \
