@@ -1,7 +1,6 @@
 name: YouTube Playlist to GDrive (Streaming)
 
 on:
-  # Runs manually when you click "Run workflow"
   workflow_dispatch:
 
 jobs:
@@ -9,7 +8,6 @@ jobs:
     runs-on: ubuntu-latest
     
     env:
-      # Pulls your existing Google Drive token
       RCLONE_CONF_JSON: ${{ secrets.RCLONE_CONF }}
 
     steps:
@@ -36,19 +34,16 @@ jobs:
 
       - name: Stream Playlist to Google Drive
         run: |
-          # 1. Your hardcoded link
-          PLAYLIST_URL="Https://youtube.com/playlist?list=PL53WOhqfIvD4YXg3bzASngyPS0FZr8Fmo&si=koc3F-FZKyji1954"
+          # 1. Your hardcoded link (from your screenshot)
+          PLAYLIST_URL="https://youtube.com/playlist?list=PL5JWOhqfIvQ4YKgjbzA5ngyPS0fZr8fno"
           
           # 2. Your target folder in Google Drive
           DRIVE_FOLDER="gdrive:Telegram_Archive/Reasoning/"
           
           echo "Starting 1-by-1 transfer for: $PLAYLIST_URL"
           
-          # 3. The magic --exec flag
-          # This tells yt-dlp to download exactly ONE video, immediately trigger 
-          # rclone to move it to Google Drive (which deletes it locally), 
-          # and ONLY THEN move on to download the next video.
-          yt-dlp -f "bestvideo[ext=mp4]+bestaudio[m4a]/best[ext=mp4]/best" \
+          # 3. Fixed the format string (added ext=m4a)
+          yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
                  -o "%(playlist_index)02d - %(title)s.%(ext)s" \
                  --ignore-errors \
                  --no-warnings \
@@ -56,4 +51,4 @@ jobs:
                  "$PLAYLIST_URL"
           
           echo "Playlist transfer complete!"
-
+          
