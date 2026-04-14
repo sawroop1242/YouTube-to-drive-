@@ -29,9 +29,12 @@ jobs:
 
       - name: Install yt-dlp and Rclone
         run: |
-          pip install -U "yt-dlp[default]"
+          pip install -U yt-dlp
           sudo apt-get update -qq
           sudo apt-get install -y rclone ffmpeg
+          yt-dlp --version
+
+      
 
       - name: Configure Rclone
         run: |
@@ -59,7 +62,6 @@ jobs:
 
       
 
-
       - name: Download Playlist
         run: |
           mkdir -p /tmp/ytdl
@@ -68,15 +70,14 @@ jobs:
           echo "Downloading: $PLAYLIST_URL"
 
           yt-dlp \
-            -f "best[height<=1080]/best" \
-            --merge-output-format mp4 \
-            --extractor-args "youtube:player_client=android,web" \
+            --no-check-certificates \
+            --extractor-args "youtube:player_client=ios;player_skip=webpage,configs" \
+            -f "best" \
             -o "/tmp/ytdl/%(playlist_index)02d - %(title)s.%(ext)s" \
             --cookies cookies.txt \
             --ignore-errors \
-            --retries 5 \
-            --fragment-retries 5 \
-            --file-access-retries 5 \
+            --retries 10 \
+            --fragment-retries 10 \
             --no-warnings \
             --progress \
             "$PLAYLIST_URL" || true
@@ -84,6 +85,11 @@ jobs:
           echo "------------------------------"
           echo "Files downloaded: $(ls /tmp/ytdl/ | wc -l)"
           ls /tmp/ytdl/
+
+      
+     
+
+      
 
       - name: Upload to Google Drive
         run: |
