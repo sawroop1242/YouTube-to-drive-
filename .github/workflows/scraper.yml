@@ -30,9 +30,11 @@ jobs:
       - name: Install yt-dlp and Rclone
         run: |
           pip install -U yt-dlp
+          pip install -U "yt-dlp[default]"
           sudo apt-get update -qq
           sudo apt-get install -y rclone ffmpeg
           yt-dlp --version
+
 
       
 
@@ -60,8 +62,6 @@ jobs:
           fi
           echo "✓ Cookie format OK"
 
-      
-
       - name: Download Playlist
         run: |
           mkdir -p /tmp/ytdl
@@ -70,19 +70,21 @@ jobs:
           echo "Downloading: $PLAYLIST_URL"
 
           yt-dlp \
-            -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/b[ext=mp4]/b" \
-            --merge-output-format mp4 \
-            --extractor-args "youtube:player_client=ios" \
-            --cookies cookies.txt \
+            -f "18/best" \
+            --extractor-args "youtube:player_client=tv,default" \
             -o "/tmp/ytdl/%(playlist_index)02d - %(title)s.%(ext)s" \
+            --cookies cookies.txt \
             --ignore-errors \
-            --retries 10 \
-            --fragment-retries 10 \
+            --retries 5 \
+            --fragment-retries 5 \
             --no-warnings \
             --progress \
             "$PLAYLIST_URL" || true
 
-          
+          echo "------------------------------"
+          echo "Files downloaded: $(ls /tmp/ytdl/ | wc -l)"
+          ls /tmp/ytdl/
+
       
      
 
